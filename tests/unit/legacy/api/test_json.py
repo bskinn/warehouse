@@ -70,6 +70,21 @@ def project_only_pre():
     return ProjectData(project=project, latest_stable=None, latest_pre=latest_pre)
 
 
+@pytest.fixture(scope="function")
+def release_check(monkeypatch, db_request):
+    def _release_check(project, release):
+        response = pretend.stub()
+        json_release = pretend.call_recorder(lambda ctx, request: response)
+        monkeypatch.setattr(json, "json_release", json_release)
+
+        resp = json.json_project(project, db_request)
+
+        assert resp is response
+        assert json_release.calls == [pretend.call(release, db_request)]
+
+    return _release_check
+
+
 def _assert_has_cors_headers(headers):
     assert headers["Access-Control-Allow-Origin"] == "*"
     assert headers["Access-Control-Allow-Headers"] == (
@@ -107,41 +122,14 @@ class TestJSONProject:
         assert isinstance(resp, HTTPNotFound)
         _assert_has_cors_headers(resp.headers)
 
-    def test_calls_release_detail(self, monkeypatch, db_request, project_no_pre):
-        response = pretend.stub()
-        json_release = pretend.call_recorder(lambda ctx, request: response)
-        monkeypatch.setattr(json, "json_release", json_release)
+    def test_calls_release_detail(self, release_check, project_no_pre):
+        release_check(project_no_pre.project, project_no_pre.latest_stable)
 
-        resp = json.json_project(project_no_pre.project, db_request)
+    def test_with_prereleases(self, release_check, project_with_pre):
+        release_check(project_with_pre.project, project_with_pre.latest_stable)
 
-        assert resp is response
-        assert json_release.calls == [
-            pretend.call(project_no_pre.latest_stable, db_request)
-        ]
-
-    def test_with_prereleases(self, monkeypatch, db_request, project_with_pre):
-        response = pretend.stub()
-        json_release = pretend.call_recorder(lambda ctx, request: response)
-        monkeypatch.setattr(json, "json_release", json_release)
-
-        resp = json.json_project(project_with_pre.project, db_request)
-
-        assert resp is response
-        assert json_release.calls == [
-            pretend.call(project_with_pre.latest_stable, db_request)
-        ]
-
-    def test_only_prereleases(self, monkeypatch, db_request, project_only_pre):
-        response = pretend.stub()
-        json_release = pretend.call_recorder(lambda ctx, request: response)
-        monkeypatch.setattr(json, "json_release", json_release)
-
-        resp = json.json_project(project_only_pre.project, db_request)
-
-        assert resp is response
-        assert json_release.calls == [
-            pretend.call(project_only_pre.latest_pre, db_request)
-        ]
+    def test_only_prereleases(self, release_check, project_only_pre):
+        release_check(project_only_pre.project, project_only_pre.latest_pre)
 
 
 class TestJSONProjectSlash:
