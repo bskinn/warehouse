@@ -72,12 +72,14 @@ def project_only_pre():
 
 @pytest.fixture(scope="function")
 def release_check(monkeypatch, db_request):
-    def _release_check(project, release):
+    def _release_check(project, release, api_func, api_func_args):
+        api_func_args.update({"request": db_request})
+
         response = pretend.stub()
         json_release = pretend.call_recorder(lambda ctx, request: response)
         monkeypatch.setattr(json, "json_release", json_release)
 
-        resp = json.json_project(project, db_request)
+        resp = getattr(json, api_func)(**api_func_args)
 
         assert resp is response
         assert json_release.calls == [pretend.call(release, db_request)]
@@ -123,13 +125,22 @@ class TestJSONProject:
         _assert_has_cors_headers(resp.headers)
 
     def test_calls_release_detail(self, release_check, project_no_pre):
-        release_check(project_no_pre.project, project_no_pre.latest_stable)
+        project = project_no_pre.project
+        release = project_no_pre.latest_stable
+
+        release_check(project, release, "json_project", {"project": project})
 
     def test_with_prereleases(self, release_check, project_with_pre):
-        release_check(project_with_pre.project, project_with_pre.latest_stable)
+        project = project_with_pre.project
+        release = project_with_pre.latest_stable
+
+        release_check(project, release, "json_project", {"project": project})
 
     def test_only_prereleases(self, release_check, project_only_pre):
-        release_check(project_only_pre.project, project_only_pre.latest_pre)
+        project = project_only_pre.project
+        release = project_only_pre.latest_pre
+
+        release_check(project, release, "json_project", {"project": project})
 
 
 class TestJSONProjectSlash:
